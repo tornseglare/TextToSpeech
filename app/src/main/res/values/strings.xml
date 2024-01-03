@@ -3,4 +3,6 @@
     <string name="change_pitch">Pitch</string>
     <string name="change_speech_rate">Speech rate</string>
     <string name="change_locale">Locale</string>
+    <string name="search_language">Search language</string>
+    <string name="speak_text">Speak text</string>
 </resources>

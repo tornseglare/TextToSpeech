@@ -18,22 +18,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +53,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mask.texttospeech.ui.theme.TextToSpeechTheme
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 // Working code från den här videon:
@@ -69,25 +75,34 @@ class MainActivity : ComponentActivity() {
 
     val buttonCornerRadius = 20.dp
 
+    private var searchLanguage: String = ""
+
+    private val locales = Locale.getAvailableLocales()
+
+    // Använde phind.com som gav mig den här koden! :O
+    // Först sorterar jag rubbet på friendly name, och sedan grupperar jag per språk, så att listan endast visar de olika språken och skippar de olika varianterna.
+    // private val groupedByLanguage = locales.sortedBy { it.displayName }.groupBy { it.language }
+
+    // Så LÄTT att skapa listor i kotlin, not.. listOf() är readonly, och new finns ju inte.
+    // MutableList vore ok, men att använda remember på en sådan skulle bli svårare, så jag skapar alltså om listan var gång användaren skriver en ny bokstav i sökningen!
+    //private var languageList: List<Locale> = listOf<Locale>()
+    private var languageList: MutableList<Locale> = mutableListOf()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Det här krävs för att findViewById() ska hitta recycler_view.xml alls. (Som jag raderade efter en hel kväll av helvete med xml layout-skit)
         //setContentView(R.layout.activity_main)
 
-        val locales = Locale.getAvailableLocales()
+        // Sorterar _inte_ här, det görs i LanguagesList() för att LazyColumn ska uppdatera sig när searchLanguage uppdateras vid sökningen.
+        languageList.addAll(
+            locales.sortedBy { it.displayName }
+        )
 
-        // Använde phind.com som gav mig den här koden! :O
-        // Först sorterar jag rubbet på friendly name, och sedan grupperar jag per språk, så att listan endast visar de olika språken och skippar de olika varianterna.
-        val groupedByLanguage = locales.sortedBy { it.displayName }.groupBy { it.language }
-
-        // map är grym, här ber jag den plocka ut language ur härket (it) och lägga allihopa i en lista. List<String>
-        val languageList: List<Locale> = groupedByLanguage.map {
+        /*val languageList: List<Locale> = groupedByLanguage.map {
             // Man _kan_ ta first() eftersom det alltid är "standardspråket", tex Swedish utan Åmålska. displayName är alltså i samtliga fall språkets namn utan dess kursiver.
             it.value.first() //.displayName
-        }
-
-        //val dataset = listOf<String>("January", "February", "March")
+        }*/
 
         // RecyclerView är ett jävla skit som är helt icke-kompatibel med @Content..
         /*val recyclerViewAdapter = RecyclerViewAdapter(dataset)
@@ -102,27 +117,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Column(modifier = Modifier
-                            .weight(0.5f, false)
-                            .background(color = Color.Black)
-                            .fillMaxSize()
-                        ) {
-                            LanguagesList(languageList)
-                        }
-                        Column(modifier = Modifier
-                            .weight(0.5f, false)
-                            .fillMaxSize()
-                        ) {
-                            DropdownMenuWithLanguages()
-                            EditPitch()
-                            EditSpeechRate()
-                            TextInput()
-                            BtnTextToSpeech()
-                        }
-                    }
+                    MainView()
                 }
             }
         }
@@ -166,7 +161,43 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun TextInput(modifier: Modifier = Modifier) {
+    fun MainView(modifier: Modifier = Modifier) {
+        // OBS! Lösningen på att LazyColumn vägrade uppdatera sig är här!
+        // https://stackoverflow.com/questions/71626861/jetpack-compose-how-to-search-and-display-specific-data-from-room-in-lazycolum
+        //
+        // Grejen är väl kort och gott att vi skickar med textState till SearchLanguage() som uppdaterar den,
+        // och till LanguagesList() som därmed beror på dess värde!
+        // ..i princip samma som alltid, fast inte riktigt.. (och det är ju det som gör det så jävla svårt)
+        //
+        val textState = remember { mutableStateOf(searchLanguage) }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = modifier
+        ) {
+            Column(modifier = Modifier
+                .weight(0.5f, false)
+                .fillMaxSize()
+            ) {
+                SearchLanguage(textState)
+                LanguagesList(textState)
+            }
+            Column(modifier = Modifier
+                .weight(0.5f, false)
+                .fillMaxSize()
+            ) {
+                //DropdownMenuWithLanguages()
+                EditPitch(Modifier.fillMaxWidth())
+                EditSpeechRate(Modifier.fillMaxWidth())
+                TextToRead(Modifier.fillMaxWidth())
+                BtnTextToSpeech(Modifier.fillMaxWidth())
+            }
+        }
+    }
+
+
+    @Composable
+    fun TextToRead(modifier: Modifier = Modifier) {
         // Utan en remember så uppdateras inte vyn när jag skriver in nya värden.
         var theValue by remember { mutableStateOf(textToSpeak) }
 
@@ -193,12 +224,12 @@ class MainActivity : ComponentActivity() {
             // Lägger jag clip() före clickable() så kan jag sedan bara klicka på den rundade ytan och inte hela knappens rektangel.
             Column(
                 modifier = modifier
-                    .background(color = Color(160, 110, 40))
+                    .padding(4.dp)
                     .clip(
                         RoundedCornerShape(
                             buttonCornerRadius,
                             buttonCornerRadius,
-                            0.dp,
+                            buttonCornerRadius,
                             buttonCornerRadius
                         )
                     )
@@ -213,7 +244,8 @@ class MainActivity : ComponentActivity() {
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Hello"
+                    text = stringResource(R.string.speak_text),
+                    modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
                 )
             }
         }
@@ -308,7 +340,8 @@ class MainActivity : ComponentActivity() {
             onValueChanged = {
                 daPitch = it
                 pitch = it
-            })
+            },
+            modifier)
     }
 
     @Composable
@@ -325,7 +358,8 @@ class MainActivity : ComponentActivity() {
             onValueChanged = {
                 daSpeechRate = it
                 speechRate = it
-            })
+            },
+            modifier)
     }
 
     @Composable
@@ -363,7 +397,7 @@ class MainActivity : ComponentActivity() {
             modifier = modifier
                 .fillMaxWidth()
                 .padding(2.dp)
-                .clip(RoundedCornerShape(buttonCornerRadius, 0.dp, 0.dp, buttonCornerRadius))
+                .clip(RoundedCornerShape(buttonCornerRadius, buttonCornerRadius, buttonCornerRadius, buttonCornerRadius))
                 .clickable {
                     // this@MainActivity because, fuck off: https://stackoverflow.com/questions/58308082/error-none-of-the-following-functions-can-be-called-with-the-arguments-supplied
                     Toast
@@ -397,7 +431,9 @@ class MainActivity : ComponentActivity() {
 
     // Efter flera timmars ofruktsamt testande med RecyclerView så fann jag LazyColumn.
     @Composable
-    fun LanguagesList(languages: List<Locale>, modifier: Modifier = Modifier) {
+    fun LanguagesList(searchInput: MutableState<String>, modifier: Modifier = Modifier) {
+
+        val searchedText: String = searchInput.value
 
         // State-hoisting: komplicerat ord för att se till att LanguageItem() är "state-less", dvs. inte har några remember's i sig.
         // Genom att skicka med vilken icon som ska visas så ansvarar denna funktion för detta,
@@ -410,28 +446,36 @@ class MainActivity : ComponentActivity() {
             mutableStateOf(selectedMainLanguage)
         }
 
+        val lazyListState = rememberLazyListState()
+        val coroutineScope = rememberCoroutineScope()
+
+        //val remLanguageList = remember { languageList }
+        //val remLanguageListCount = remember { languageList.count() }
+
         // Genom att bara ta bort alla inställningar så fyllde den by default allt tillgängligt utrymme. :)
         LazyColumn(
-            Modifier
-                .padding(8.dp)
+            state = lazyListState,
+            modifier = Modifier
                 .background(color = Color.DarkGray)
-                //.verticalScroll(state = ScrollState(0), enabled = true)
-                //.height(256.dp)
+                .padding(4.dp)
         ) {
             // Verkar inte som man kan kollapsa på dessa, så begränsad nytta.
             // stickyHeader {  }
 
             // Över en timmas googlande och video-tittande och prat med chatbottar... Helt jävla omöjligt att reda ut hur de vill ha det..
-            items(languages) { locale ->
+            itemsIndexed(items = languageList.filter {
+                // Filtrerar HÄR, annars kommer väl aldrig vy-jävelen att uppdateras.
+                it.displayName.contains(searchedText, ignoreCase = true)
+            }) { index, item ->
 
                 var icon = Icons.Filled.FavoriteBorder
 
-                if(locale.displayName == rememberLocale.displayName) {
+                if(item.displayName == rememberLocale.displayName) {
                     icon = Icons.Filled.Favorite
                 }
 
                 // Det är denna callbacken som uppdaterar rememberLocale, och därmed ber LazyColumn rendera om sina element.
-                LanguageItem(locale, icon, onclickEvent =  {
+                LanguageItem(item, icon, onclickEvent =  {
                     // Döper om "it" till "selectedLocale" här. ;-)
                     selectedLocale ->
                         selectedMainLanguage = selectedLocale
@@ -439,15 +483,61 @@ class MainActivity : ComponentActivity() {
                 })
             }
         }
+
+        // Scrolla ner till förvalt språk, måste göras efter att vyn skapats, och det gör man visst så här.
+        // https://developer.android.com/jetpack/compose/side-effects#launchedeffect
+        LaunchedEffect(coroutineScope) {
+            coroutineScope.launch {
+                val i = languageList.indexOf(selectedMainLanguage)
+
+                // If we have sorted away the currently selected language.
+                if(languageList[i] == selectedMainLanguage) {
+                    lazyListState.scrollToItem(i)
+                }
+            }
+        }
     }
+
+    // searchInput är ju söksträngen ifråga, men ett MutableState för att bla bla bla. (listfan ska uppdateras)
+    @Composable
+    fun SearchLanguage(searchInput: MutableState<String>, modifier: Modifier = Modifier) {
+        //var searchInput by remember { mutableStateOf(searchLanguage) }
+
+        TextField(
+            value = searchInput.value,
+            singleLine = true,
+            leadingIcon = { Icons.Filled.LocationOn },
+            modifier = modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.search_language)) },
+            onValueChange = {
+                searchInput.value = it
+                searchLanguage = it
+
+                //filterLanguageList()
+            })
+    }
+
+    // Fungerar, men var tvungen att fuula in allt i LazyColumn för att den skulle fatta att listan uppdaterats.
+    /*fun filterLanguageList() {
+        val groupedByLanguage: List<Locale> = locales.filter {
+            it.displayName.contains(searchLanguage, ignoreCase = true)
+        }.sortedBy { it.displayName }//.groupBy { it.language }
+
+        var c = groupedByLanguage.count()
+
+        //languageList = groupedByLanguage
+        languageList.clear()
+        languageList.addAll(groupedByLanguage)
+    }*/
 
     @Preview(showBackground = true)
     @Composable
     fun PreviewLanguagesList() {
-        val dataset = listOf<Locale>(Locale.CANADA, Locale.CHINA, Locale.FRANCE, Locale.UK, Locale.GERMAN, Locale.GERMANY)
+        languageList = mutableListOf<Locale>(Locale.CANADA, Locale.CHINA, Locale.FRANCE, Locale.UK, Locale.GERMAN, Locale.GERMANY)
+        val textState = remember { mutableStateOf(searchLanguage) }
 
         TextToSpeechTheme {
-            LanguagesList(dataset)
+            LanguagesList(textState)
         }
     }
 
@@ -455,7 +545,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun PreviewTextInput() {
         TextToSpeechTheme {
-            TextInput()
+            TextToRead()
         }
     }
     @Preview(showBackground = true)
