@@ -2,11 +2,12 @@ package com.mask.texttospeech
 
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.StringRes
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,14 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -36,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -62,18 +64,18 @@ import java.util.Locale
 // LazyColumn video som fungerar, samt en massa annat smart:
 // https://www.youtube.com/watch?v=XfYlRn_Jy1g
 
-// TODO: Tanken är att man ska få upp alla "subspråk när man valt tex. engelska. I en ny lista, så extrahera din fina kod så den kan populeras med olika listor
-//  och anropa olika callbacks.
-
 class MainActivity : ComponentActivity() {
     private lateinit var textToSpeech: TextToSpeech
     private var textToSpeak: String = "there once was a little redhood in the forest."
     private var selectedMainLanguage = Locale.ENGLISH
     private var selectedLocale = Locale.CANADA
-    private var pitch : String = "2.0"
-    private var speechRate : String = "0.6"
+    private var pitch : Float = 2.0f
+    private var speechRate : Float = 0.6f
 
-    val buttonCornerRadius = 20.dp
+    val pitchAsString : String = pitch.toString()
+    val speechRateAsString : String = speechRate.toString()
+
+    private val buttonCornerRadius = 20.dp
 
     private var searchLanguage: String = ""
 
@@ -124,7 +126,7 @@ class MainActivity : ComponentActivity() {
     }
 
     // All the fun happens here. :)
-    fun TextToSpeech() {
+    private fun textToSpeech() {
         textToSpeech = TextToSpeech(this) {
             status ->
             if(status == TextToSpeech.SUCCESS) {
@@ -136,8 +138,8 @@ class MainActivity : ComponentActivity() {
                 }
                 else
                 {
-                    textToSpeech.setPitch(pitch.toFloat())
-                    textToSpeech.setSpeechRate(speechRate.toFloat())
+                    textToSpeech.setPitch(pitch)
+                    textToSpeech.setSpeechRate(speechRate)
                     //textToSpeech.setVoice()
 
                     textToSpeech.speak(
@@ -154,11 +156,11 @@ class MainActivity : ComponentActivity() {
     // https://stackoverflow.com/questions/40352684/what-is-the-equivalent-of-java-static-methods-in-kotlin
     // Men! en skriver att det rek. är att lägga funktionen utanför någon klass, så blir det ju utan this och därmed statisk.
     // (Kotlin skapar då en under-the-hood klass class TextToSpeechPackage, där namespacet är med i namnet.
-    companion object {
+    /*companion object {
         fun StaticFunctionExample() {
             var a = 2 // yeye, men du kan inte använda this förstås.
         }
-    }
+    }*/
 
     @Composable
     fun MainView(modifier: Modifier = Modifier) {
@@ -238,7 +240,7 @@ class MainActivity : ComponentActivity() {
                         // MainActivity.StaticFunctionExample()
 
                         // Men eftersom this behövs så lägger jag in alltsammans inkl. den här @Composablen i klassen. Ser inga större skador med det. :-)
-                        TextToSpeech()
+                        textToSpeech()
                     }
                     .background(color = Color(140, 210, 140))
                     .padding(16.dp)
@@ -255,11 +257,11 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun DropdownMenuWithLanguages(modifier: Modifier = Modifier) {
         var showMenu by remember { mutableStateOf(false) }
-        val locales = Locale.getAvailableLocales()
+        //val locales = Locale.getAvailableLocales()
 
         // Använde phind.com som gav mig den här koden! :O
         // Först sorterar jag rubbet på friendly name, och sedan grupperar jag per språk, så att listan endast visar de olika språken och skippar de olika varianterna.
-        val groupedByLanguage = locales.sortedBy { it.displayName }.groupBy { it.language }
+        // val groupedByLanguage = locales.sortedBy { it.displayName }.groupBy { it.language }
 
         // same same, jag vill ha index typ.
         // var selectedLanguage = groupedByLanguage.get(selectedLocale.displayName)
@@ -328,7 +330,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     // vore ju häftigare med upp och ner pilar, men vem orkar.
     fun EditPitch(modifier: Modifier = Modifier) {
-        var daPitch by remember { mutableStateOf(pitch) }
+        var daPitch by remember { mutableStateOf(pitchAsString) }
 
         EditNumberField(
             label = R.string.change_pitch,
@@ -338,15 +340,21 @@ class MainActivity : ComponentActivity() {
             ),
             value = daPitch,
             onValueChanged = {
+                // During any values entered we just store it as is.
                 daPitch = it
-                pitch = it
+            },
+            onFocusLost = {
+                // But when losing focus we validate the input and reset it to zero if not ok.
+                val theFloat = tryParseFloat(it);
+                daPitch = theFloat.toString()
+                pitch = theFloat
             },
             modifier)
     }
 
     @Composable
     fun EditSpeechRate(modifier: Modifier = Modifier) {
-        var daSpeechRate by remember { mutableStateOf(speechRate) }
+        var daSpeechRate by remember { mutableStateOf(speechRateAsString) }
 
         EditNumberField(
             label = R.string.change_speech_rate,
@@ -357,9 +365,24 @@ class MainActivity : ComponentActivity() {
             value = daSpeechRate,
             onValueChanged = {
                 daSpeechRate = it
-                speechRate = it
+            },
+            onFocusLost = {
+                // Så att användaren ser på en gång att "tomtefar" blir 0.0.
+                val theFloat = tryParseFloat(it)
+
+                daSpeechRate = theFloat.toString()
+                speechRate = theFloat
             },
             modifier)
+    }
+
+    private fun tryParseFloat(value : String) : Float {
+        // Spännande, kompilatorn tyckte att jag kunde "lift out the return", det blev så här:
+        return try {
+            value.toFloat()
+        } catch(e : NumberFormatException) {
+            0.0f
+        }
     }
 
     @Composable
@@ -368,6 +391,7 @@ class MainActivity : ComponentActivity() {
         keyboardOptions: KeyboardOptions,
         value: String,
         onValueChanged: (String) -> Unit,
+        onFocusLost: (String) -> Unit,
         modifier: Modifier = Modifier
     ) {
         // Intressanta är: leadingIcon och label, dvs. ikonen till vänster i rutan samt
@@ -376,7 +400,19 @@ class MainActivity : ComponentActivity() {
         TextField(
             value = value,
             singleLine = true,
-            modifier = modifier,
+            modifier = modifier
+                /*.onFocusChanged { focusState ->
+                    if( !focusState.isFocused)
+                    {
+                        onFocusLost(value)
+                    }
+                }*/
+                .onFocusEvent { focusState ->
+                    if( !focusState.isFocused)
+                    {
+                        onFocusLost(value)
+                    }
+                },
             onValueChange = onValueChanged,
             label = { Text(stringResource(label)) },
             keyboardOptions = keyboardOptions
@@ -411,7 +447,7 @@ class MainActivity : ComponentActivity() {
                     onclickEvent(locale)
                 }
                 .background(Color.LightGray)
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 8.dp, vertical = 12.dp)
         ) {
             Icon(
                 imageVector = icon,
@@ -420,7 +456,7 @@ class MainActivity : ComponentActivity() {
                 tint = Color(0, 110, 59))
             Text(
                 text = locale.displayName,
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 textAlign = TextAlign.Left,
                 modifier = Modifier
                     .weight(0.2f)
@@ -455,7 +491,7 @@ class MainActivity : ComponentActivity() {
         // Genom att bara ta bort alla inställningar så fyllde den by default allt tillgängligt utrymme. :)
         LazyColumn(
             state = lazyListState,
-            modifier = Modifier
+            modifier = modifier
                 .background(color = Color.DarkGray)
                 .padding(4.dp)
         ) {
@@ -466,7 +502,8 @@ class MainActivity : ComponentActivity() {
             itemsIndexed(items = languageList.filter {
                 // Filtrerar HÄR, annars kommer väl aldrig vy-jävelen att uppdateras.
                 it.displayName.contains(searchedText, ignoreCase = true)
-            }) { index, item ->
+            }) { _, item ->
+                // _ is index for each item, but we don't use it, so _ indicates that's the point.
 
                 var icon = Icons.Filled.FavoriteBorder
 

@@ -1,0 +1,41 @@
+
+Klicka fram pre-launch-report och sedan details i vänstermenyn.
+https://play.google.com/console/u/0/developers/7421392476990213978/app/4973396787845782434/pre-launch-report/overview
+  <-Visar att det i princip bara rör sig om de fem NumberFormatExceptions som hände. :) Inte så farligt alltså, fixa det och skicka igen. 
+
+This item's height is 44dp. Consider making the height of this touch target 48dp or larger.
+  -Allmänt vill de att knappar etc ska vara 48dp eller högre, de gav 78 exempel med olika element i språklistan. :-D
+  
+Consider increasing this item's text foreground to background contrast ratio.
+  The item's text contrast ratio is 1.84. This ratio is based on an estimated foreground colour of #1D1B17 and an estimated background colour of #4C463A. Consider using colours that result in a contrast ratio greater than 4.50 for small text, or 3.00 for large text.
+  https://support.google.com/accessibility/android/answer/7158390
+  
+This item may not have a label readable by screen readers.
+  -Bara dumt, det är ju element i scrolllistan som är halvvägs utanför!!
+
+---------------
+
+Mailen har lite mer detaljer, men det ser ut som de skickat varje mail två gånger:
+
+"Issue found: Violation of Content Ratings policy"
+
+We found an issue in the following area(s):
+    Hi-res icon (en-GB): Please see attached screenshot HI_RES_ICON-4041.png
+    
+We found an issue in the following area(s):
+    Hi-res icon (en-GB): Please see attached screenshot HI_RES_ICON-4041.png
+
+"The app’s icon or title when installed on the device differs from what is displayed in the Play Store"
+  We found an issue in the following area(s):
+      Hi-res icon (en-GB): Please see attached screenshot HI_RES_ICON-4077.png
+      Launch / On Device Icon: Please see attached screenshot LAUNCHER_ICON-2782.png
+      
+We found an issue in the following area(s):
+    Hi-res icon (en-GB): Please see attached screenshot HI_RES_ICON-4077.png
+    Launch / On Device Icon: Please see attached screenshot LAUNCHER_ICON-2782.png
+    
+---------------
+
+  FIXAT: java.lang.NumberFormatException: For input string: "ddwztc"
+    <-Jösses. De har fyllt i text i Pitch och/eller Speech rate! Dåligt av mig att inte testa det!!
+    <-Fixade det 16/9. :)
